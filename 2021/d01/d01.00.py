@@ -32,7 +32,7 @@ def validate_test(case_id, inp=None, want_p1=None, want_p2=None):
     return True
 
 def main():
-    with open('inputs/d01.input.txt') as f:
+    with open('../inputs/d01.txt') as f:
         inp = f.read().strip()
     return d01(inp)
 
