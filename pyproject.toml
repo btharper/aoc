@@ -1,0 +1,14 @@
+[tool.poetry]
+name = "advent-of-code"
+version = "2021.12"
+description = "Solutions to Advent of Code puzzles"
+authors = ["Ben Harper <btharper@google.com>"]
+
+[tool.poetry.dependencies]
+python = "^3.8"
+ipython = "*"
+pytest = "*"
+black = {version = ">=20.8b1", python = "^3.7"}
+requests = "*"
+click = "*"
+python-dateutil = "*"
