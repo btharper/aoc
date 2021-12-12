@@ -125,15 +125,14 @@ pj-fs
 start-RW""", 226, 3509),
     ]
 
-    
+    """
     # Non multiprocessing version
     for case in cases:
         validate_test(*case)
     p1, p2 = main()
     print(f"p1 = {p1}\np2 = {p2}")
-    
-
     """
+
     with Pool(processes=min(8, len(cases) + 1)) as pool:
         main_res = pool.apply_async(main)
         test_res = [pool.apply_async(validate_test, case) for case in cases]
@@ -149,4 +148,3 @@ start-RW""", 226, 3509),
             assert p1 is None or do_p1 == True, "Got P1 value without 'do_p1' set"
             assert p2 is None or do_p2 == True, "Got P2 value without 'do_p2' set"
             print(f"p1 = {p1}\np2 = {p2}")
-    """
