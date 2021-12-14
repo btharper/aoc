@@ -1,5 +1,6 @@
 from collections import defaultdict, Counter, deque
-from itertools import product
+from functools import cache
+from itertools import product, pairwise
 from multiprocessing import Pool
 import math
 import re
