@@ -1,146 +1,122 @@
 from collections import defaultdict, Counter, deque
 from dataclasses import dataclass
+from enum import IntEnum
 from functools import cache
 from itertools import product, pairwise, permutations
 from multiprocessing import Pool
 import math
+import operator as op
 import re
 from typing import List, Union
 
-non_digits = re.compile('[^0-9]+')
-def sign(a, b, step=1):
-    return int(math.copysign(step, b-a))
-def autorange(a,b, step=1):
-    if a == b:return (a,)
-    s = sign(a, b, step)
-    return range(a, b+s, s)
-def get_ints(line, strip_line=False):
-    if strip_line:
-        line = line.strip()
-    return [*map(int, non_digits.split(line))]
+class Side(IntEnum):
+    LEFT = 0
+    RIGHT = 1
 
 @dataclass
 class Snailfish:
-    left: Union[Snailfish, int]
-    right: Union[Snailfish, int]
-    depth: int
-    verbose: bool = False
+    _children: List[Union[Snailfish, int]]
+    depth: int = 0
+    _verbose: bool = False
 
     def __int__(self):
-        mag_left = int(self.left)
-        mag_right = int(self.right)
-        return mag_left * 3 + mag_right * 2
+        return sum(map(lambda x:op.mul(*x), zip(map(int, self._children), (3,2))))
+#        mag_left = int(self.left)
+#        mag_right = int(self.right)
+#        return mag_left * 3 + mag_right * 2
 
     def __add__(self, other):
-        ret = Snailfish(self, other, 0)
-        ret.left.IncrementDepth()
+        ret = Snailfish([self, other], 0)
+        ret.left.increment_depth()
         if isinstance(ret.right, Snailfish):
-            ret.right.IncrementDepth()
+            ret.right.increment_depth()
         ret.reduce()
         return ret
 
     def __str__(self):
         return f"[{self.left},{self.right}]"
 
-    def IncrementDepth(self):
-        self.depth += 1
-        for child in (self.left, self.right):
-            if isinstance(child, Snailfish):
-                child.IncrementDepth()
+    @property
+    def left(self):
+        return self._children[0]
 
-    def SetVerbose(self, val):
-        self.verbose = val
-        if isinstance(self.left, Snailfish):
-            self.left.SetVerbose(val)
-        if isinstance(self.right, Snailfish):
-            self.right.SetVerbose(val)
+    @left.setter
+    def left(self, val):
+        self._children[0] = val
+
+    @property
+    def right(self):
+        return self._children[1]
+
+    @right.setter
+    def right(self, val):
+        self._children[1] = val
+
+    def increment_depth(self):
+        self.depth += 1
+        for child in self._children:
+            if isinstance(child, Snailfish):
+                child.increment_depth()
+
+    def set_verbose(self, val):
+        self._verbose = val
+        for child in self._children:
+            if isinstance(child, Snailfish):
+                child.set_verbose(val)
 
     def reduce(self):
         while True:
-            if self.CheckExplodes()[0]:
+            if self.check_explodes()[0]:
                 continue
-            if self.CheckSplits():
+            if self.check_splits():
                 continue
             break
 
-    def CheckSplits(self):
-        if isinstance(self.left, int):
-            if self.left >= 10:
-                self.left = Snailfish(self.left // 2, (self.left+1) // 2, self.depth + 1)
-                return True
-        else:
-            if self.left.CheckSplits():
-                return True
-        if isinstance(self.right, int):
-            if self.right >= 10:
-                self.right = Snailfish(self.right // 2, (self.right+1) // 2, self.depth + 1)
-                return True
-        else:
-            if self.right.CheckSplits():
+    def check_splits(self):
+        for i, child in enumerate(self._children):
+            if isinstance(child, Snailfish):
+                if child.check_splits():
+                    return True
+            elif child > 9:
+                self._children[i] = Snailfish([child // 2, (child + 1) // 2], self.depth + 1)
                 return True
         return False
 
-    def CheckExplodes(self, final=True):
-        if self.verbose:
+    def check_explodes(self):
+        if self._verbose:
             print(f"Checking ({self})@{self.depth} for explosions -",
                     f"{isinstance(self.left, Snailfish)}-{isinstance(self.right, Snailfish)}")
-        if self.depth >= 4 and isinstance(self.left, int) and isinstance(self.right, int):
-            if self.verbose:print(f"\tLeaf at {self.depth=} is exploding")
-            assert not final
-            return True, False, self.left, self.right
-        explodes, zerod, leftward, rightward = False, True, None, None
-        if isinstance(self.left, Snailfish):
-            if self.verbose:print(f"\tChecking left for explosions")
-            explodes, zerod, leftward, rightward = self.left.CheckExplodes(False)
-            if explodes:
-                if self.verbose:print(f"left child exploded {explodes=}, {zerod=}, {leftward=}, {rightward=}")
-                if not zerod:
-                    self.left = 0
-                    zerod = True
-                if rightward is not None:
-                    if isinstance(self.right, Snailfish):
-                        rightward = self.right.ExplosionFromLeft(rightward)
-                    else:
-                        assert isinstance(self.right, int)
-                        self.right += rightward
-                        rightward = None
-                return explodes, zerod, leftward, rightward
-        if isinstance(self.right, Snailfish):
-            if self.verbose:print(f"\tChecking right for explosions")
-            explodes, zerod, leftward, rightward = self.right.CheckExplodes(False)
-            if explodes:
-                if self.verbose:print(f"right child exploded {explodes=}, {zerod=}, {leftward=}, {rightward=}")
-                if not zerod:
-                    self.right = 0
-                    zerod = True
-                if leftward is not None:
-                    if isinstance(self.left, Snailfish):
-                        leftward = self.left.ExplosionFromRight(leftward)
-                    else:
-                        assert isinstance(self.left, int)
-                        self.left += leftward
-                        leftward = None
-                return explodes, zerod, leftward, rightward
-        return explodes, zerod, leftward, rightward
+        if self.depth >= 4 and all(isinstance(child, int) for child in self._children):
+            if self._verbose:print(f"\tLeaf at {self.depth=} is exploding")
+            return True, True, self.left, self.right
 
-    def ExplosionFromLeft(self, val):
-        if isinstance(self.left, int):
-            self.left += val
-            return None
-        else:
-            assert isinstance(self.left, Snailfish)
-            return self.left.ExplosionFromLeft(val)
+        for i, child in enumerate(self._children):
+            if isinstance(child, Snailfish):
+                if self._verbose:print(f"\tChecking {Side(i)} for explosions")
+                descendant_exp, child_exp, *travel = child.check_explodes()
+                if descendant_exp:
+                    if self._verbose:
+                        print(f"{Side(i)} child exploded: {descendant_exp=}, {child_exp=}, {travel=}")
+                    if child_exp:
+                        self._children[i] = 0
+                    if travel[1-i] is not None:
+                        if isinstance(self._children[1-i], Snailfish):
+                            travel[1-i] = self._children[1-i].explode_from(i, travel[1-i])
+                        else:
+                            self._children[1-i] += travel[1-i]
+                            travel[1-i] = None
+                    return descendant_exp, False, *travel
+        return False, False, None, None
 
-    def ExplosionFromRight(self, val):
-        if isinstance(self.right, int):
-            self.right += val
-            return None
+    def explode_from(self, side, val):
+        child = self._children[side]
+        if isinstance(child , int):
+            self._children[side] += val
         else:
-            assert isinstance(self.right, Snailfish)
-            return self.right.ExplosionFromRight(val)
+            self._children[side].explode_from(side, val)
 
     @staticmethod
-    def parse(inp: str, depth: int):
+    def parse(inp: str, depth: int = 0):
         #print(f"Parsing {inp} @ {depth=}")
         if ',' not in inp:
             return int(inp)
@@ -159,7 +135,7 @@ class Snailfish:
                     sdepth -= 1
         assert sdepth == 0
         right_val = Snailfish.parse(''.join(vals[1]), depth + 1)
-        return Snailfish(left_val, right_val, depth)
+        return Snailfish([left_val, right_val], depth)
 
 def d18(inp, sample=False):
     p1, p2 = None, None
@@ -242,9 +218,9 @@ if __name__ == '__main__':
 
     for s, v in explode_cases:
         sf = Snailfish.parse(s, 0)
-        #sf.SetVerbose(True)
-        sf.CheckExplodes()
-        #sf.verbose = False
+        sf.set_verbose(True)
+        sf.check_explodes()
+        sf.set_verbose(False)
         assert str(sf) == v, f"Exploding ({s}) != ({v})\n got {sf}"
 
     add_cases = (
@@ -289,6 +265,8 @@ if __name__ == '__main__':
             assert do_p1 or do_p2, "Didn't run any tets"
             assert p1 is None or do_p1 == True, "Got P1 value without 'do_p1' set"
             assert p2 is None or do_p2 == True, "Got P2 value without 'do_p2' set"
+            assert p1 == 4017
+            assert p2 == 4583
             print(f"p1 = {p1}\np2 = {p2}")
     #"""#"""#"""
 
