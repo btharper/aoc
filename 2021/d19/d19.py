@@ -5,6 +5,7 @@ from itertools import product, pairwise, permutations
 from multiprocessing import Pool
 import copy
 import math
+import random
 import re
 import operator as oper
 from typing import List, Set, Any, Dict
@@ -98,30 +99,80 @@ class Point:
             red.rot_yz_swap()
         if abs(red.x) > abs(red.y):
             red.rot_xy_swap()
+            if abs(red.y) > abs(red.z):
+                red.rot_yz_swap()
         if red.x < 0:
             red.rot_neg_xy()
         if red.y < 0:
             red.rot_neg_yz()
-        if red.z < 0 and red.x == 0:
-            print(f"Have zeros:\n0\t{red.astuple()}")
-            if red.y == 0:
+        if red.z < 0:
+            if red.x == 0:
+                print(f"Have zeros:\n0\t{red.astuple()}")
+                if red.y == 0:
+                    red.rot_neg_yz()
+                    print(f"1\t{red.astuple()}\nEnd case y == 0")
+                    assert red.x == 0
+                    assert red.y == 0
+                    assert red.z > 0
+                else:
+                    red.rot_neg_xy()
+                    print(f"1\t{red.astuple()}")
+                    red.rot_neg_yz()
+                    print(f"2\t{red.astuple()}")
+                    assert red.x == 0
+                    assert red.y > 0
+                    assert red.z > 0
+            elif red.x == red.y:
+                red.rot_xy_swap()
                 red.rot_neg_yz()
-                print(f"1\t{red.astuple()}\nEnd case y == 0")
-                assert red.x == 0
-                assert red.y == 0
-                assert red.z > 0
-            elif red.x == 0:
-                red.rot_neg_xy()
-                print(f"1\t{red.astuple()}")
+            elif red.y == abs(red.z):
+                print("swap around a(y) == a(z)")
+                red.rot_yz_swap()
                 red.rot_neg_yz()
-                print(f"2\t{red.astuple()}")
-                assert red.x == 0
-                assert red.y > 0
-                assert red.z > 0
+        assert red.x >= 0, f"{self.astuple()} to {red.astuple()}"
+        assert red.y >= 0, f"{self.astuple()} to {red.astuple()}"
+        assert red.x <= red.y, f"{self.astuple()} to {red.astuple()}"
+        assert red.y <= abs(red.z), f"{self.astuple()} to {red.astuple()}"
+        assert red.z >= 0 or red.x != red.y or red.x != 0, f"{self.astuple()} to {red.astuple()}"
+        assert abs(red.x) != abs(red.y) or red.x == red.y, f"{self.astuple()} to {red.astuple()}"
+        assert abs(red.y) != abs(red.z) or red.y == red.z, f"{self.astuple()} to {red.astuple()}"
         return red
 
     def astuple(self):
         return (self.x, self.y, self.z)
+
+def run_safety_checks():
+    assert_test = (
+            (596, -804, -596),
+            (23, 35, -35),
+            (-23, -35, 35),
+            (35, 35, 23),
+            (-23, 35, 35),
+            (-35, -35, 23),
+            (0,0,-5),
+            (1,0,3),
+            (-2,0,2),
+            (0,0,0),
+            (random.randint(-5,5), random.randint(-5,5), random.randint(-5,5)),
+            (random.randint(-5,5), random.randint(-5,5), random.randint(-5,5)),
+            (random.randint(-5,5), random.randint(-5,5), random.randint(-5,5)),
+            (random.randint(-5,5), random.randint(-5,5), random.randint(-5,5)),
+            (random.randint(-5,5), random.randint(-5,5), random.randint(-5,5)),
+            (random.randint(-5,5), random.randint(-5,5), random.randint(-5,5)),
+            (random.randint(-5,5), random.randint(-5,5), random.randint(-5,5)),
+            (random.randint(-5,5), random.randint(-5,5), random.randint(-5,5)),
+            (random.randint(-5,5), random.randint(-5,5), random.randint(-5,5)),
+        )
+    for case in assert_test:
+        case_pt = Point(*case)
+        red = case_pt.reduce()
+        for _ in range(48):
+            if random.random() < 0.5:
+                case_pt.rot_pos()
+            else:
+                case_pt.rot_neg_xy()
+            shifted = case_pt.reduce()
+            assert shifted == red, f"\n{shifted=	}\n{red=		}\n{case_pt=	}"
 
 @dataclass
 class Scanner:
@@ -341,9 +392,8 @@ def d19(inp, sample=False):
                 #print(f"Others found from {scanner_k} : {others=}")
                 for other_k in [*others]:
                     print(f"{tab*3}****trace**** Top of `for other_k in [*others]:`")
-                    if scanner_t is None:
-                        scanner_v = copy.deepcopy(copy_scanner_v)
-                        scanner_t = scanner_v.astuple()
+                    scanner_v = copy.deepcopy(copy_scanner_v)
+                    scanner_t = scanner_v.astuple()
                     assert scanner_t == copy_scanner_t
                     assert scanner_t[1] in map_astuple(scanner_v), f"\n{scanner_t=}\n\n{scanner_t in edge_delta_cache=}\n\n{scanner_t[1]=}\n\n{scanner_v}"
                     assert delta[2] in map_astuple(scanner_v), f"\n{delta=}\n\n{delta[2]=}\n\n{scanner_t=}\n\n{scanner_v}"
@@ -356,47 +406,62 @@ def d19(inp, sample=False):
                     corner_point = Point(*delta[2])
                     corner_friend = Point(*delta[3])
                     rot_group = [scanner_v, my_delta, corner_point, corner_friend]
+                    def checks():
+                        assert corner_point in scanner_v.beacons
+                        assert corner_friend in scanner_v.beacons
+                        assert my_delta.reduce() == other_delta.reduce(), f"\n{my_delta.reduce()=}\t{my_delta.astuple()}\n{other_delta.reduce()=}\t{other_delta.astuple()}"
                     print(f"tfm:\tTrying to make\t{my_delta=} to {other_delta}")
                     assert my_delta.reduce() == other_delta.reduce()
                     scanner_t = None
-                    assert corner_point in scanner_v.beacons
-                    assert corner_friend in scanner_v.beacons
                     if abs(other_delta.x) != abs(my_delta.x):
                         if abs(other_delta.x) == abs(my_delta.z):
-                            for entry in rot_group:
-                                entry.rot_yz_swap()
-                            assert corner_point in scanner_v.beacons
-                            assert corner_friend in scanner_v.beacons
-                        for entry in rot_group:
-                            entry.rot_xy_swap()
-                        assert corner_point in scanner_v.beacons
-                        assert corner_friend in scanner_v.beacons
+                            [entry.rot_yz_swap() for entry in rot_group]
+                            checks()
+                        [entry.rot_xy_swap() for entry in rot_group]
+                        checks()
                     print(f"\tFixed abs(x)?\t{my_delta=} ~= {other_delta}")
                     if other_delta.x != my_delta.x:
                         for entry in rot_group:
                             entry.rot_neg_xy()
-                    assert corner_point in scanner_v.beacons
-                    assert corner_friend in scanner_v.beacons
+                        assert my_delta.x == other_delta.x
+                    checks()
                     print(f"\tProgress\t{my_delta=} ~= {other_delta}")
                     assert my_delta.reduce() == other_delta.reduce(), f"\n{my_delta.reduce()=}\n{other_delta.reduce()=}"
                     if abs(other_delta.y) != abs(my_delta.y):
                         for entry in rot_group:
                             entry.rot_yz_swap()
-                    assert corner_point in scanner_v.beacons
-                    assert corner_friend in scanner_v.beacons
-                    assert my_delta.reduce() == other_delta.reduce()
+                        checks()
+                    assert abs(my_delta.y) == abs(other_delta.y)
                     if other_delta.y != my_delta.y:
-                        for entry in rot_group:
-                            entry.rot_neg_yz()
-                    assert corner_point in scanner_v.beacons
-                    assert corner_friend in scanner_v.beacons
-                    assert my_delta.reduce() == other_delta.reduce()
-                    # A zero is unsigned and gives more degrees of freedom
-                    if my_delta.x == 0:
-                        if my_delta.z != other_delta.z:
+                        [entry.rot_neg_yz() for entry in rot_group]
+                        checks()
+                    checks()
+                    if my_delta.z != other_delta.z:
+                        print(f"{my_delta=} --- {other_delta=}")
+                        # A zero is unsigned and gives more degrees of freedom
+                        if my_delta.x == 0:
+                            print("Swap around x == 0")
                             [entry.rot_neg_yz() for entry in rot_group]
-                        if my_delta.y != other_delta.y:
                             [entry.rot_neg_xy() for entry in rot_group]
+                        elif my_delta.y == 0:
+                            print("Swap around y == 0")
+                            [entry.rot_neg_yz() for entry in rot_group]
+                        elif abs(my_delta.x) == abs(my_delta.y):
+                            print("Swap around abs(x) == abs(y)")
+                            [entry.rot_xy_swap() for entry in rot_group]
+                            [entry.rot_neg_yz() for entry in rot_group]
+                        elif abs(my_delta.y) == abs(my_delta.z):
+                            print("Swap around abs(y) == abs(z)")
+                            [entry.rot_yz_swap() for entry in rot_group]
+                            if my_delta.y != other_delta.y:
+                                [entry.rot_neg_yz() for entry in rot_group]
+                        elif abs(my_delta.x) == abs(my_delta.z):
+                            print("Swap around abs(x) == abs(z)")
+                            [entry.rot_xy_swap() for entry in rot_group]
+                            [entry.rot_yz_swap() for entry in rot_group]
+                            [entry.rot_xy_swap() for entry in rot_group]
+                            [entry.rot_neg_xy() for entry in rot_group]
+                    checks()
                     print(f"\tFixed?\t\t{my_delta=} == {other_delta}")
                     assert my_delta == other_delta, f"{my_delta=} --- {other_delta=}"
                     #print(f"found {delta=} between\n{scanner_k=}\n{scanner_v=}\n\nand\n\n{other_v=}\n\n\n{nl.join(map(str, sorted(scanner_v.beacons)))}\n\n{nl.join(map(str, sorted(other_v.beacons)))}\n\n{delta}")
@@ -619,6 +684,7 @@ if __name__ == '__main__':
 30,-46,-14""", 79, 3621),
     ]
 
+    """
     # Non multiprocessing version
     for case in cases:
         validate_test(*case)
@@ -627,7 +693,8 @@ if __name__ == '__main__':
 
 
     """
-    with Pool(processes=min(8, len(cases) + 1)) as pool:
+    with Pool(processes=min(8, len(cases) + 2)) as pool:
+        validation = pool.apply_async(run_safety_checks)
         main_res = pool.apply_async(main)
         test_res = [pool.apply_async(validate_test, case) for case in cases]
         test_pass, do_p1, do_p2 = True, False, False
@@ -636,10 +703,11 @@ if __name__ == '__main__':
             test_pass &= tp
             do_p1 |= dp1
             do_p2 |= dp2
+        validation.get(30)
         if test_pass:
             p1, p2 = main_res.get(60)
             assert do_p1 or do_p2, "Didn't run any tets"
             assert p1 is None or do_p1 == True, "Got P1 value without 'do_p1' set"
             assert p2 is None or do_p2 == True, "Got P2 value without 'do_p2' set"
             print(f"p1 = {p1}\np2 = {p2}")
-    """
+    #"""
