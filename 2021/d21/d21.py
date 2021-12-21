@@ -4,6 +4,7 @@ from itertools import cycle, product, pairwise
 from multiprocessing import Pool
 from typing import Tuple, Dict, List
 import math
+import operator as oper
 import re
 
 non_digits = re.compile('[^0-9]+')
@@ -18,65 +19,51 @@ def get_ints(line, strip_line=False):
         line = line.strip()
     return [*map(int, non_digits.split(line))]
 
+dirac_freq = ((3, 1), (4, 3), (5, 6), (6, 7), (7, 6), (8, 3), (9, 1))
+
 @cache
-def dirac(player: int, score: Tuple[int], pos: Tuple[int], roll: int, acc):
-    score = [*score,]
-    pos = [*pos,]
-    new_pos = (pos[player] + roll) % 10
-    pos[player] = new_pos
-    if acc == 3:
-        score[player] += new_pos + 1
-        if score[player] >= 21:
-            ret = [0, 0]
-            ret[player] += 1
-            return ret
-        player = 1 - player
-    acc %= 3
-    u1 = dirac(player, (*score,), (*pos,), 1, acc+1)
-    u2 = dirac(player, (*score,), (*pos,), 2, acc+1)
-    u3 = dirac(player, (*score,), (*pos,), 3, acc+1)
-    return [*map(sum, zip(u1, u2, u3))]
+def dirac(curr_score, other_score, curr_pos, other_pos, roll):
+    curr_pos = (curr_pos + roll) % 10
+    curr_score += curr_pos + 1
+    if curr_score >= 21:
+        return 1, 0
+    res1, res2 = 0,0
+    for dice_roll, freq in dirac_freq:
+        dir1, dir2 = dirac(other_score, curr_score, other_pos, curr_pos, dice_roll)
+        res1 += dir1 * freq
+        res2 += dir2 * freq
+    return res2, res1
 
-def d21(inp, sample=False):
-    p1, p2 = 0, None
-
+def d21(inp):
     pos = []
     score = [0, 0]
-    rolls = 0
-    player = 0
     for line in inp.split('\n'):
         *_, player_pos = line.split()
         pos.append(int(player_pos)-1)
-#    for i, p in enumerate(pos):
-#        print(f"Player {i+1} starts at {p+1}")
-    u1 = dirac(0, (0, 0), (*pos,), 1, 1)
-    u2 = dirac(0, (0, 0), (*pos,), 2, 1)
-    u3 = dirac(0, (0, 0), (*pos,), 3, 1)
-    p2 = max(map(sum, zip(u1, u2, u3)))
+    res1, res2 = 0,0
+    for dice_roll, freq in dirac_freq:
+        dir1, dir2 = dirac(0, 0, *pos, dice_roll)
+        res1 += dir1 * freq
+        res2 += dir2 * freq
+    p2 = max(res1, res2)
 
-    dice_list = [*range(1,101,1)]
-#    print(f"{min(dice_list)=} {max(dice_list)=}")
-    dice = cycle(range(1, 101))
+    roll_res = (6, 9, 2, 5, 8, 1, 4, 7, 0, 3)
+    rolls = 0
+    player = 0
     while max(score) < 1000:
-        rolla = next(dice)
-        rollb = next(dice)
-        rollc = next(dice)
-        roll = rolla+rollb+rollc
+        new_pos = (pos[player] + roll_res[rolls % 10]) % 10
         rolls += 3
-        pos[player] = (pos[player] + roll) % 10
-        score[player] += pos[player] + 1
-        #if pos[player] == 0:score[player] += 9
-#        print(f"Player {player+1} rolls {rolla}+{rollb}+{rollc} and moves to space {pos[player]+1} for a total score of {score[player]}")
+        score[player] += new_pos + 1
+        pos[player] = new_pos
         player = 1 - player
     p1 = min(score) * rolls
-#    print(f"After {rolls} turns, losing player has {min(score)} points")
 
     return p1, p2
 
 def validate_test(case_id, inp=None, want_p1=None, want_p2=None):
     do_p1, do_p2 = False, False
     #print(f"validate_test({case_id}, {inp}, {want_p1}, {want_p2})")
-    got_p1, got_p2 = d21(inp, sample=True)
+    got_p1, got_p2 = d21(inp)
     if want_p1 is not None:
         assert want_p1 == got_p1, f"{case_id=} p1:\n\t{want_p1=}\n\t{got_p1=}"
         do_p1 = True
@@ -97,15 +84,6 @@ if __name__ == '__main__':
 Player 2 starting position: 8""", 739785, 444356092776315),
     ]
 
-    #"""
-    # Non multiprocessing version
-    for case in cases:
-        validate_test(*case)
-    p1, p2 = main()
-    print(f"p1 = {p1}\np2 = {p2}")
-    """
-
-
     with Pool(processes=min(8, len(cases) + 1)) as pool:
         main_res = pool.apply_async(main)
         test_res = [pool.apply_async(validate_test, case) for case in cases]
@@ -120,5 +98,6 @@ Player 2 starting position: 8""", 739785, 444356092776315),
             assert do_p1 or do_p2, "Didn't run any tets"
             assert p1 is None or do_p1 == True, "Got P1 value without 'do_p1' set"
             assert p2 is None or do_p2 == True, "Got P2 value without 'do_p2' set"
+            assert p1 == 604998
+            assert p2 == 157253621231420
             print(f"p1 = {p1}\np2 = {p2}")
-    #"""
