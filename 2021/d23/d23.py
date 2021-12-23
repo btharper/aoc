@@ -43,7 +43,6 @@ class Line:
         return ret
 
     def append_tail(self, val):
-        assert len(self.have) + 1 <= self.total
         # Only to be called during init
         self.have.append(val)
         self.depth.append(len(self.depth))
@@ -52,8 +51,6 @@ class Line:
             self.open = False
 
     def pop(self):
-        assert len(self.depth) == len(self.have)
-        assert len(self.have) > 0
         # Returns (pop_item, pop_cost)
         cost = self.have[0] * self.depth.popleft()
         if len(self.depth) == 0:
@@ -61,10 +58,6 @@ class Line:
         return self.have.popleft(), cost
 
     def push(self, val):
-        assert self.want is None or self.want == val
-        assert len(self.depth) == len(self.have)
-        assert self.open
-        assert len(self.have) < self.total
         # Returns cost
         cost = 0
         self.have.appendleft(val)
@@ -72,7 +65,6 @@ class Line:
         for i,v in enumerate(self.depth):
             if v < i:
                 self.depth[i] += 1
-                assert self.depth[i] == i
                 cost += self.have[i]
         return cost
 
@@ -135,35 +127,27 @@ class Burrow:
         # For stacks with depth (hall), include depth + distance
         for line in self.hall:
             for pod, depth in zip(line.have, line.depth):
-                tx, ty = targets[pod]
-                dist = abs(line.x-tx) + abs(line.y-ty) + depth
+                tx = targets[pod]
+                dist = abs(line.x-tx) + 1 + depth
                 val += dist * pod
         # For homes, distance inclues entering/exiting the hallway
         for line in self.home:
             for pod, depth in zip(line.have, line.depth):
                 if line.want == pod:
                     continue
-                tx, ty = targets[pod]
-                # +2 for in and back out of the hallway
-                dist = abs(line.x-tx) + abs(line.y-ty) + 2 + depth
+                tx = targets[pod]
+                dist = abs(line.x-tx) + 2 + depth
                 val += dist * pod
         return val
 
 log_map = {1:1, 10:2, 100:3, 1000:4}
 pow_map = {1:1, 2:10, 3:100, 4:1000}
-targets = {1:(1,1), 10:(3,1), 100:(5,1), 1000:(7,1)}
+targets = {1:2, 10:4, 100:6, 1000:8}
 
 def d23(inp, sample=False):
     inp2 = "##\n  #D#C#B#A#\n  #D#B#A#C#\n  #".join(inp.split('##\n  #'))
-#    print(inp)
-#    print('\n\n')
-#    print(inp.split('\n  #'))
-#    print('\n\n')
-#    print(inp2)
     p1 = solution(inp)
     p2 = solution(inp2, total=4)
-    assert p1 is not None
-    assert p2 is not None
     return p1, p2
 
 
@@ -173,15 +157,9 @@ def solution(inp, total=2):
     for line in burrow.home:
         line.total = total
     for line in filter(None, map(lambda s: s.strip(' .#'), inp.split('\n'))):
-        #print(f"{line=}")
         for i, val in enumerate(map(lambda c: ord(c) - ord('A'), line.split('#'))):
-#            print(f"From {line=} {i=} is {val=}", end='')
-#            print(f"({chr(val + ord('A'))})")
             burrow.home[i].append_tail(pow(10, val))
     burrow.cap_homes()
-
-#    print(burrow)
-#    print(*burrow.home, sep='\n')
 
     stack = []
     #(fscore, gscore, state)
@@ -191,18 +169,9 @@ def solution(inp, total=2):
     while stack:
         # Fetch
         item_fscore, item_gscore, item = hq.heappop(stack)
-#        print(item_gscore, [(home_line.open, home_line.full()) for home_line in item.home])
         # Check for termination
         if all(home_line.open and home_line.full() for home_line in item.home):
-            print(f"Found result {item_gscore=} {item_fscore=}")
-#            pprint(item.home)
-#            pprint(item.hall)
-            if soln is None or item_gscore < soln:
-                soln = item_gscore
-            stack = [*filter(lambda x:x[1]<=soln, stack)]
-            hq.heapify(stack)
-#            stack.clear()
-#            break
+            return item_gscore
         # Go through neighbors - All moves are bottom rooms to hall or hall to rooms
         # Hallway to room movement
         for (src_idx, src), (dst_idx, dst) in product(enumerate(item.hall), enumerate(item.home)):
@@ -213,22 +182,8 @@ def solution(inp, total=2):
             pod = src.have[0]
             if dst.want != pod:
                 continue
-#            dst_idx = log_map[pod] - 1
-#            dst = item.home[dst_idx]
-            # 01234567890
-            # 01 2 3 4 56 - src_idx
-            #   0 1 2 3   - dst_idx
-#            src_off = (0,1,3,5,7,9,10)[src_idx]
-#            dst_off = (2,4,6,8)[dst_idx]
             if any(blocker.full() and (src.x < blocker.x < dst.x or src.x > blocker.x > dst.x) for blocker in item.hall):
                 continue
-#            if src.x < dst.x and any(blocker.full() and src.x < blocker.x < dst.x for blocker in item.hall):
-#                continue
-#            elif src.x > dst.x and any(blocker.full() and dst.x < blocker.x < src.x for blocker in item.hall):
-#                continue
-#            elif src_idx > dst_idx + 2 and any(item.hall[h_i].full() for h_i in range(src_idx-1, dst_idx-1, -1)):
-#                continue
-#            print(f"Moving from src:{src.name!r} to dst:{dst.name!r}\n{src=}\n\n{dst=}")
             # Reachable, calculate distance
             dist = abs(dst.x-src.x) + abs(dst.y-src.y)
             n_gscore = dist * pod + item_gscore
@@ -237,10 +192,8 @@ def solution(inp, total=2):
             # Copy
             state.hall[src_idx] = state.hall[src_idx].copy()
             state.home[dst_idx] = state.home[dst_idx].copy()
-            assert state.hall[src_idx].have[0] == pod, f"{pod=}\n{state.hall[src_idx].have[0]=}"
             # Pop src / Push dst
             pop_item, pop_cost = state.hall[src_idx].pop()
-#            print(f"Popped {pop_item=} for {pop_cost=}")
             # Push dst
             push_cost = state.home[dst_idx].push(pop_item)
             # Add cost
@@ -248,12 +201,10 @@ def solution(inp, total=2):
             # Add new node
             n_hscore = state.h()
             n_fscore = n_gscore + n_hscore
-#            print(f"Moving from src:{src.name} to dst:{dst.name}\n{item=}\n\n{state=}\n\n{n_fscore=}, {n_gscore=}, {n_hscore=}")
             state_tuple = state.as_tuple()
             if state_tuple not in seen or seen[state_tuple] > n_gscore:
                 seen[state_tuple] = n_gscore
-                if soln is None or n_gscore <= soln:
-                    hq.heappush(stack, (n_fscore, n_gscore, state))
+                hq.heappush(stack, (n_fscore, n_gscore, state))
         # Room to Hallway movement
         for (src_idx, src), (dst_idx, dst) in product(enumerate(item.home), enumerate(item.hall)):
             if src.empty() or dst.full():
@@ -262,72 +213,29 @@ def solution(inp, total=2):
                 continue
             pod = src.have[0]
             if pod == src.want and src.open:
-                assert len(src.have) < src.total or src.full()
-#                assert src.
                 continue
-#            print(f"Could travel from room-{src_idx} to hall-{dst_idx}")
             # Calculate distance
             dist = abs(dst.x-src.x) + abs(dst.y-src.y)
             n_gscore = dist * pod + item_gscore
             ### Generate state
             state = item.shallow_copy()
-            #print(f"Copied state\n\n{item=}\n\n{state=}")
-#            print(f"Copied state")
-#            pprint(item)
-#            print()
-#            pprint(state)
-#            print()
             # Copy src/dst
             state.home[src_idx] = state.home[src_idx].copy()
             state.hall[dst_idx] = state.hall[dst_idx].copy()
             # Pop src/push dst
             pop_item, pop_cost = state.home[src_idx].pop()
             push_cost = state.hall[dst_idx].push(pop_item)
-#            pprint(state)
-#            print()
             # Tabulate
             n_gscore += pop_cost + push_cost
             n_hscore = state.h()
             n_fscore = n_gscore + n_hscore
             # Append
-#            print(f"Moving from src:{src.name} to dst:{dst.name}\n{item=}\n\n{state=}\n\n{n_fscore=}, {n_gscore=}, {n_hscore=}")
-#            print(f"Moving from src:{src.name} to dst:{dst.name}\n\t{n_fscore=}, {n_gscore=}, {n_hscore=}\n")
-#            print([list.full() for list in item.home])
-#            print("item {hall,home}")
-#            pprint(item.hall)
-#            pprint(item.home)
-#            print("state {hall,home}")
-#            pprint(state.hall)
-#            pprint(state.home)
             state_tuple = state.as_tuple()
             if state_tuple not in seen or seen[state_tuple] > n_gscore:
                 seen[state_tuple] = n_gscore
-                if soln is None or n_gscore < soln:
-                    hq.heappush(stack, (n_fscore, n_gscore, state))
+                hq.heappush(stack, (n_fscore, n_gscore, state))
 
     return soln
-
-@cache
-def unblocked_paths(src, full):
-    assert all(isinstance(full_val, bool) for full_val in full), f"{full}"
-    assert 0 <= src <= 3
-    # src - room src_idx
-    # full - hall full() mapping
-    # hall - 01 2 3 4 56
-    # room -   0 1 2 3
-    res = []
-    # To the left
-    for i in range(src + 1, -1, -1):
-        if full[i]:
-            break
-        res.append(i)
-    # To the right
-    for i in range(src + 2, 6, 1):
-        if full[i]:
-            break
-        res.append(i)
-    res.sort() # Be fancy!
-    return res
 
 def validate_test(case_id, inp=None, want_p1=None, want_p2=None):
     do_p1, do_p2 = False, False
@@ -354,9 +262,19 @@ if __name__ == '__main__':
 ###B#C#B#D###
   #A#D#C#A#
   #########""", 12521, 44169),
+        (1, """#############
+#...........#
+###A#D#C#A###
+  #C#D#B#B#
+  #########""", None, None),
+        (2, """#############
+#...........#
+###C#A#B#C###
+  #D#D#B#A#
+  #########""", 18300, 50190),
     ]
 
-    #"""
+    """
     # Non multiprocessing version
     for case in cases:
         validate_test(*case)
@@ -379,5 +297,7 @@ if __name__ == '__main__':
             assert do_p1 or do_p2, "Didn't run any tets"
             assert p1 is None or do_p1 == True, "Got P1 value without 'do_p1' set"
             assert p2 is None or do_p2 == True, "Got P2 value without 'do_p2' set"
+            assert p1 == 11120
+            assert p2 == 49232
             print(f"p1 = {p1}\np2 = {p2}")
         #"""
